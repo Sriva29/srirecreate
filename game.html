@@ -7,19 +7,18 @@
 <!-- zimjs.com - JavaScript Canvas Framework -->
 <script type=module>
 
-import zim from "https://zimjs.org/cdn/015/zim";
+import zim from "https://zimjs.com/cdn/015/zim_physics";
+
+const assets = ["Roshi_walk_spritesheet.png", "Roshi_idle_spritesheet.png", "Roshi_walk_spritesheet.json", "Roshi_idle_spritesheet.json"];
+const path = "Assets/Roshi/";
 
 // See Docs under Frame for FIT, FILL, FULL, and TAG
-new Frame(FIT, 1920, 1080, light, dark, ready);
+new Frame(FIT, 960, 540, light, dark, ready, assets, path);
 function ready() {
-    
     // given F (Frame), S (Stage), W (width), H (height)
-    // put code here
-    
-    new Circle(100, blue)
-        .center()
-        .drag();
-        
+    const Roshiwalks = new Pic("Roshi_walk_spritesheet.png"); 
+    const Roshiwalking = new Sprite({image:Roshiwalks, cols: 6, rows: 1}).center().run({loop:true});
+    //const RoshiIdling =     
 } // end ready
 
 </script>
