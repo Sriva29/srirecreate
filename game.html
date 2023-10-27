@@ -3,26 +3,101 @@
 <head>
 <meta charset="utf-8" />
 <title>SriReCreate</title>
-
 <!-- zimjs.com - JavaScript Canvas Framework -->
 <script type=module>
+// Took inspiration from Alone Droid for organization and code - view-source:https://zimjs.com/droid2/
 
+// Imports
 import zim from "https://zimjs.com/cdn/015/zim_physics";
 
+// Frame Variables
 const assets = ["Roshi_walk_spritesheet.png", "Roshi_idle_spritesheet.png", "Roshi_walk_spritesheet.json", "Roshi_idle_spritesheet.json"];
 const path = "Assets/Roshi/";
+const scaling = "fit";
+const width = 960;
+const height = 540;
+const color = black;
+const outerColor = darker;
 
-// See Docs under Frame for FIT, FILL, FULL, and TAG
-new Frame(FIT, 960, 540, light, dark, ready, assets, path);
-function ready() {
-    // given F (Frame), S (Stage), W (width), H (height)
-    const Roshiwalks = new Pic("Roshi_walk_spritesheet.png"); 
-    const Roshiwalking = new Sprite({image:Roshiwalks, cols: 6, rows: 1}).center().run({loop:true});
-    //const RoshiIdling =     
-} // end ready
+// Bottom frame for the environment.
+//const bgFrame = new Frame(scaling, width, height, color, outerColor, bgReady, assets, path);
+function bgReady() {
+    
+}
 
+// Physics frame contains Roshi the dog. Yes, R is in upper case because Roshi deserves it! 🐕
+const physicsFrame = new Frame(scaling, width, height, color, outerColor, phyReady, assets, path);
+function phyReady() {
+// given F (Frame), S (Stage), W (width), H (height)
+const RoshiwalksPNG = new Pic("Roshi_walk_spritesheet.png");
+const RoshiIdlesPNG = new Pic("Roshi_idle_spritesheet.png");
+const RoshiWalking = new Sprite({image:RoshiwalksPNG, cols: 6, rows: 1}).run({loop:true});
+const RoshiIdling = new Sprite({image:RoshiIdlesPNG, cols: 4, rows: 1}).run({loop:true});
+let RoshiX = RoshiWalking.x = 100;
+let RoshiY = RoshiWalking.y = 300;
+//RoshiWalking.sca(1,1);
+//console.log(RoshiWalking);
+//RoshiWalking.vis(false);
+RoshiIdling.vis(true).pos(RoshiX, RoshiY);
+
+let moveLeft = false;
+let moveRight = false;
+
+F.on("keydown", (e) => {
+    if (e.code == "ArrowLeft") {
+        zog("Lefts gooooo!");
+        moveLeft = true;
+        moveRight = false;
+        RoshiWalking.sca(-1,1);
+        RoshiIdling.sca(-1,1);
+        RoshiWalking.vis(true);
+        RoshiIdling.vis(false);
+        S.update();
+    }
+    if(e.code == "ArrowRight"){
+        zog("Right it is!");
+        moveLeft = false;
+        moveRight = true;
+        RoshiWalking.sca(1,1);
+        RoshiIdling.sca(1,1);
+        RoshiWalking.vis(true);
+        RoshiIdling.vis(false);
+        S.update();
+    }
+});
+
+F.on("keyup", (e)=>{
+    if (e.code == "ArrowLeft" || e.code == "ArrowRight"){
+        moveLeft = false;
+        moveRight = false;
+        RoshiWalking.vis(false);
+        RoshiIdling.vis(true);
+        RoshiIdling.pos(RoshiX,RoshiY); 
+        RoshiWalking.pos(RoshiX,RoshiY);
+        //RoshiIdling.y = RoshiY;
+    }
+});
+
+Ticker.add(moveRoshi);
+
+function moveRoshi() {
+    if (moveLeft){
+        RoshiWalking.x -=5;
+        //RoshiIdling.x -=5;
+        RoshiX = RoshiWalking.x;
+    }
+    if(moveRight){
+        RoshiWalking.x += 5;
+        //RoshiIdling.x += 5;
+        RoshiX = RoshiWalking.x;
+    }
+    S.update();
+}
+}
 </script>
-<meta name="viewport" content="width=device-width, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
 </head>
+
 <body></body>
+
 </html>
