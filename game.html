@@ -1,71 +1,415 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="utf-8" />
-<title>SriReCreate</title>
-<!-- zimjs.com - JavaScript Canvas Framework -->
-<script type=module>
+    <meta charset="utf-8" />
+    <title>SriReCreate</title>
+    <!-- zimjs.com - JavaScript Canvas Framework -->
+    <script src="https://zimjs.org/cdn/1.2.0/createjs_min.js"></script>
+    <script src="https://zimjs.org/cdn/10.5.3/zim.js"></script>
+
+    <!-- use zimjs.com/distill for minified individual functions! -->
+
+    <!-- import Box2D and ZIM Physics helper 
+<script src="https://zimjs.org/cdn/Box2dWeb-2.1.a.3.min.js"></script>
+<script src="https://zimjs.org/cdn/physics_2.0.js"></script>
+<script src="https://zimjs.org/cdn/game_2.2.js"></script>
+<script src="https://zimjs.org/cdn/pizzazz_03.js"></script>
+-->
+    <script type=module>
 // Took inspiration from Alone Droid for organization and code - view-source:https://zimjs.com/droid2/
 
 // Imports
 import zim from "https://zimjs.com/cdn/015/zim_physics";
 
 // Frame Variables
-const assets = ["Roshi_walk_spritesheet.png", "Roshi_idle_spritesheet.png", "Roshi_walk_spritesheet.json", "Roshi_idle_spritesheet.json"];
-const path = "Assets/Roshi/";
+const assets = ["Roshi_walk_spritesheet.png", "Roshi_idle_spritesheet.png", "Roshi_walk_spritesheet.json", "Roshi_idle_spritesheet.json", 
+"Roshi_attack_spritesheet.png", "Roshi_attack_spritesheet.json", "Roshi_attack_cropped_spritesheet.json", "Roshi_attack_cropped_spritesheet.png",
+//"Roshi_sad.mp3", "Roshi_alert.mp3",
+//"swoosh.mp3",
+"game_ctrl.png",
+"yellow_stars.png",
+"dirt.png", "grass.png",
+"bike_spritesheet.png","bike_spritesheet.json",
+"me_100.png", "me_75.png", "me_50.png", "me_25.png","me_pixeling_spritesheet.json", "me_pixeling_spritesheet.png",
+"https://fonts.googleapis.com/css?family=VT323",
+"ui_inst.png"];
+const path = "Assets/all/";
 const scaling = "fit";
 const width = 960;
 const height = 540;
 const color = black;
 const outerColor = darker;
+let scene3Begin = false;
+
+
+//const swoosh = new Aud({file:"swoosh.mp3"});
+
+//Giving up on multiple frames for now. Ask Dan about this later.
+//const physicsAssets = ["Roshi_walk_spritesheet.png", "Roshi_idle_spritesheet.png", "Roshi_walk_spritesheet.json", "Roshi_idle_spritesheet.json"];
+//const physicsPath = "Assets/Roshi/";
+//const bgAssets = ["dirt.png", "grass.png"];
+//const bgPath = "Assets/bg/";
+//const uiAssets = [];
+//const uiPath = "Assets/ui/";
 
 // Bottom frame for the environment.
-//const bgFrame = new Frame(scaling, width, height, color, outerColor, bgReady, assets, path);
-function bgReady() {
-    
-}
+//const bgFrame = new Frame(scaling, width, height, color, outerColor, bgReady, bgAssets, bgPath);
+//function bgReady() {
 
-// Physics frame contains Roshi the dog. Yes, R is in upper case because Roshi deserves it! 🐕
-const physicsFrame = new Frame(scaling, width, height, color, outerColor, phyReady, assets, path);
-function phyReady() {
+// Going back to using a single Frame
+new Frame(scaling, width, height, color, outerColor, ready, assets, path);
 // given F (Frame), S (Stage), W (width), H (height)
-const RoshiwalksPNG = new Pic("Roshi_walk_spritesheet.png");
-const RoshiIdlesPNG = new Pic("Roshi_idle_spritesheet.png");
-const RoshiWalking = new Sprite({image:RoshiwalksPNG, cols: 6, rows: 1}).run({loop:true});
-const RoshiIdling = new Sprite({image:RoshiIdlesPNG, cols: 4, rows: 1}).run({loop:true});
-let RoshiX = RoshiWalking.x = 100;
-let RoshiY = RoshiWalking.y = 300;
+function ready(){
+// const swoosh = null;
+// const assetsLoad = F.loadAssets(["swoosh.mp3"],"Assets/all/");
+// assetsLoad.on("complete", ()=>{
+// swoosh = F.asset("swoosh.mp3");
+// });
+const stars = new Pic("yellow_stars.png").pos(300,415).sca(1.5).alp(0);
+const bike = new Sprite({json:"bike_spritesheet.json"}).pos(330,393).sca(0.5).alp(0); //not running because I don't like the animation
+const gameCtrlr = new Pic("game_ctrl.png").pos(350,350).sca(0.2).alp(0);
+stars.vis(false);
+bike.vis(false);
+const uiInst = new Pic("ui_inst.png").pos(85,100,LEFT,BOTTOM).sca(0.8);
+uiInst.vis(false);
+//Environment
+const grassTile = new Pic("grass.png");
+const dirtTile = new Pic("dirt.png");
+const numTiles = Math.ceil(W/grassTile.width);
+const grassTiles = new Tile({
+    obj: grassTile,
+    cols: numTiles,
+    rows: 1
+}).pos(0, H - (3*grassTile.height));
+const dirtTiles = new Tile({
+    obj: dirtTile,
+    cols: numTiles,
+    rows: 2
+}).pos(0, H-(2*dirtTile.height));
+//Yes, R is in upper case because Roshi deserves it! 🐕
+const RoshiWalks = new Pic("Roshi_walk_spritesheet.png");
+const RoshiIdles = new Pic("Roshi_idle_spritesheet.png");
+const RoshiAttacks = new Pic("Roshi_attack_spritesheet.png");
+const RoshiWalking = new Sprite({image:RoshiWalks, cols: 6, rows: 1}).run({loop:true});
+const RoshiIdling = new Sprite({image:RoshiIdles, cols: 4, rows: 1}).run({loop:true});
+//const RoshiAttacking = new Sprite({json:"Roshi_attack_spritesheet.json",
+//cols: 4, rows: 1,
+//label: "Roshi_Attack.png"
+//});
+const RoshiAttacking = new Sprite({image: RoshiAttacks, cols:4, rows:1});
+let RoshiX = RoshiWalking.x = -100;
+RoshiWalking.vis(false);
+const groundOffset = 2; //need to check the images later to avoid this.
+let RoshiY = grassTiles.y - RoshiWalking.height + groundOffset;
+RoshiWalking.y = RoshiY; 
+//console.log(grassTiles.y);
+//console.log(RoshiWalking.y);
+//console.log(RoshiWalking.height);
+
 //RoshiWalking.sca(1,1);
 //console.log(RoshiWalking);
 //RoshiWalking.vis(false);
 RoshiIdling.vis(true).pos(RoshiX, RoshiY);
-
 let moveLeft = false;
 let moveRight = false;
+let attacking = false;
+let direction = 1;
+
+
+const swoosh = new Aud("swoosh.mp3");
+//Dialog
+const scene1Words = [
+    "Oh no, I seem to have lost my sense of self!\n Can someone help me reconstruct my portrait?"
+];
+const scene2Words = [
+   "Hey Roshi! Good dog! You found me.",
+   "I seem to have lost my identity a bit...",
+   "Can you help me reconstruct my self-portrait?",
+   ". . .",
+   "I will play tag with you if you do",
+   "Good girl! Let's start with finding out why I like looking at the sky..."
+];
+const scene3Words = [
+   "Ah yes, that's right. I loved looking up at the stars",
+   "Used to do that for hours every day",
+   "Even travelled to hill stations to get a better view of em with my binoculars",
+   ". . .",
+   "hmmm. I remember enjoying the travel as well",
+   "Why is that I wonder. . ."
+];
+const scene4Words = [
+   "Ah you scared away my moto :(",
+   "You love barking at my motorcycle don't you?",
+   ". . .",
+   "Wait a sec, you also like barking at something else.",
+   "That's it! You bark at the characters in the games I play",
+   "I remember now. Roshi, can you please fetch (drag n drop) my controller?"
+];
+const scene5Words = [
+   "Phew! I feel like myself again!",
+   "Thanks Roshi. I hope Dan gives us good points.",
+   "This was fun. We will go on more adventures together for sure.",
+   "Good night!"
+];
+//use one dialog box by setting words for optimization later.
+STYLE = {lineHeight:33}
+const scene1Dialog = new Dialog({
+    width:W/3,
+   height:H/3,
+   words:scene1Words,
+   dialogType:"slant",
+   tailType:"triangle",
+   fill:false,
+   size:28,
+   font:"VT323",
+   color:dark,
+   backgroundColor:yellow,
+   borderColor:grey,
+   borderWidth:2,
+   corner:100,
+   padding:30,
+   tailH:RIGHT,
+   tailV:BOTTOM
+}).pos(300,50,RIGHT,TOP).vis(false);
+
+const scene2Dialog = new Dialog({
+   width:W/3,
+   height:H/3,
+   words:scene2Words,
+   dialogType:"slant",
+   tailType:"triangle",
+   fill:false,
+   size:24,
+   font:"VT323",
+   color:dark,
+   backgroundColor:yellow,
+   borderColor:grey,
+   borderWidth:2,
+   corner:100,
+   padding:50,
+   tailH:RIGHT,
+   tailV:BOTTOM
+}).pos(300,50,RIGHT,TOP).vis(false);
+const scene3Dialog = new Dialog({
+   width:W/3,
+   height:H/3,
+   words:scene3Words,
+   dialogType:"slant",
+   tailType:"triangle",
+   fill:false,
+   size:24,
+   font:"VT323",
+   color:dark,
+   backgroundColor:yellow,
+   borderColor:grey,
+   borderWidth:2,
+   corner:100,
+   padding:50,
+   tailH:RIGHT,
+   tailV:BOTTOM
+}).pos(300,50,RIGHT,TOP).vis(false);
+const scene4Dialog = new Dialog({
+   width:W/3,
+   height:H/3,
+   words:scene4Words,
+   dialogType:"slant",
+   tailType:"triangle",
+   fill:false,
+   size:24,
+   font:"VT323",
+   color:dark,
+   backgroundColor:yellow,
+   borderColor:grey,
+   borderWidth:2,
+   corner:100,
+   padding:50,
+   tailH:RIGHT,
+   tailV:BOTTOM
+}).pos(300,50,RIGHT,TOP).vis(false);
+const scene5Dialog = new Dialog({
+   width:W/3,
+   height:H/3,
+   words:scene5Words,
+   dialogType:"slant",
+   tailType:"triangle",
+   fill:false,
+   size:24,
+   font:"VT323",
+   color:dark,
+   backgroundColor:yellow,
+   borderColor:grey,
+   borderWidth:2,
+   corner:100,
+   padding:50,
+   tailH:RIGHT,
+   tailV:BOTTOM
+}).pos(300,50,RIGHT,TOP).vis(false);
+timeout(2, scene1);
+let RoshiAlertOnce = true; 
+const mePixelling = new Sprite({json:"me_pixeling_spritesheet.json"}).pos(80,200,RIGHT,TOP).sca(0.8).alp(0);
+const me_50 = new Pic("me_50.png").pos(80,200,RIGHT,TOP).sca(0.8).alp(0);
+const me_75 = new Pic("me_75.png").pos(80,200,RIGHT,TOP).sca(0.8).alp(0);
+const me_100 = new Pic("me_100.png").pos(80,200,RIGHT,TOP).sca(0.8).alp(0);
+const meGrow = new Aud("powerup.mp3");
+function scene1(){
+     fadz(mePixelling, 0.5);
+     mePixelling.run(1);
+    timeout(2,()=>{    
+    scene1Dialog.vis(true);
+    scene1Dialog.animate({props: {alpha:1},time:0.5});
+    helpButton.vis(true);
+    // zog(scene1Dialog.selectedIndex);
+    // if (scene1Dialog.selectedIndex ==0){
+    //     zog("end of dialog");
+    // }
+    // if (scene1Dialog.selectedIndex ==1){
+    //     zog("1 dialog");
+    // }
+});}
+const RoshiBark = new Aud("Roshi_alert.mp3");
+function scene2(){
+    scene1Dialog.vis(false);
+    scene2Dialog.alp(0);
+    //scene2Dialog.vis(true);
+    //change this to event trig later
+    timeout(2,()=>{
+        fadz(scene2Dialog, 1);  
+        //scene2Dialog.animate({props:{alpha:1},time:1});
+        //stars.vis(true);
+    });
+}
+//const barkInst = new Label({text:"Press F to Bark", font:"VT323"}).pos(330,393);
+//barkInst.vis(true);
+
+function scene3(){
+    fadzOut(scene2Dialog,1);
+    fadzOut(stars, 1);
+    stars.pos(-100,-100);
+    //scene2Dialog.vis(false);
+    zog("scene3 begins");
+    fadz(scene3Dialog,1);
+    //mePixelling.vis(false);
+    fadzOut(mePixelling, 0.25);
+    fadz(me_50, 0.5);
+    meGrow.play();
+}
+function scene4(){
+    fadzOut(scene3Dialog,1);
+    fadzOut(bike,0.25);
+    zogb("scene4 begins");
+    //fadz(gameCtrlr, 1);
+    fadz(scene4Dialog, 1);
+    fadzOut(me_50,0.25);
+    fadz(me_75,0.5);
+    meGrow.play();
+    //fadz(gameCtrlr,0.9);
+    gameCtrlr.drag();
+}
+function scene5(){
+    fadzOut(scene3Dialog,1);
+    fadzOut(gameCtrlr, 0.25);
+    zogr("Fin");
+    fadz(scene5Dialog,1);
+    fadzOut(me_75,0.25);
+    fadz(me_100,1);
+    //meGrow.play();
+}
+Ticker.add(indexChecker);
+function indexChecker(){
+    if(scene2Dialog.selectedIndex==4 &&RoshiAlertOnce){
+        RoshiBark.play();
+        RoshiAlertOnce=false;
+    }else
+    //zog(scene2Dialog.selectedIndex);
+    if(scene2Dialog.selectedIndex >= 5){
+        //zog("starry nights"); WHY WONT YOU WORK?! Ask Dan later.
+        fadz(stars, 0.5);
+        
+        //stars.vis(true);
+        //stars.alp(0); // I see, we don't alp in ticker because it will keep alping to 0. Ticker go brrrrrrrr
+        //stars.animate({props:{alpha:1},time:1});
+    }
+
+    if(scene3Dialog.selectedIndex ==5){
+        fadz(bike, 1);
+        timeout(2,()=>{scene3Dialog.setWords("Ah yes, I loved that bike, but you always barked at it (by pressing F for some reason)",6);});
+    }
+    if(scene4Dialog.selectedIndex == 5){
+        fadz(gameCtrlr,0.5);
+    }
+    if(gameCtrlr.hitTestRect(me_75)){
+        scene5();
+    }
+}
+
+function fadz (bro, hapz){
+    //bro.alp(0);
+    bro.vis(true);
+ 
+ bro.animate({props:{alpha:1},time:hapz});   
+}
+
+function fadzOut (bruh, tims){
+    bruh.animate({props:{alpha:0},time:tims});
+    bruh.vis(false);
+}
+
+// Physics frame contains Roshi the dog. 
+//const physicsFrame = new Frame(scaling, width, height, color, outerColor, phyReady, physicsAssets, physicsPath);
+//function phyReady() {
+//zimDefaultFrame = physicsFrame;
+
 
 F.on("keydown", (e) => {
-    if (e.code == "ArrowLeft") {
+    if (e.code == "ArrowLeft" && !attacking) {
         zog("Lefts gooooo!");
+        uiInst.vis(false);
         moveLeft = true;
         moveRight = false;
+        attacking = false;
         RoshiWalking.sca(-1,1);
         RoshiIdling.sca(-1,1);
+        direction = -1;
         RoshiWalking.vis(true);
         RoshiIdling.vis(false);
         S.update();
     }
-    if(e.code == "ArrowRight"){
+    if(e.code == "ArrowRight" && !attacking){
         zog("Right it is!");
         moveLeft = false;
         moveRight = true;
+        attacking = false;
         RoshiWalking.sca(1,1);
         RoshiIdling.sca(1,1);
-        RoshiWalking.vis(true);
+        direction = 1;
+        //RoshiWalking.vis(true);
         RoshiIdling.vis(false);
         S.update();
     }
+    if(e.code == "KeyF" &&!attacking){
+        zog("Ruff Ruff");
+        new Aud("Roshi_sad.mp3").play();
+        moveLeft = moveRight = false;
+        attacking = true;
+        RoshiWalking.vis(false);
+        RoshiIdling.vis(false);
+        RoshiAttacking.sca(direction, 1);
+        RoshiAttacking.pos(RoshiX,RoshiY);
+        // Ask Dan. Figure out why the on complete event doesn't work for my animation. For now, using timeout as a remedy
+        //RoshiAttacking.run(1,false).on("animationend",()=>{
+        RoshiAttacking.run();
+        RoshiAttacking.vis(true);
+        timeout(1,()=>{
+        zog("nuff said");
+        attacking = false;
+        RoshiAttacking.stop();
+        RoshiAttacking.vis(false);
+        RoshiIdling.vis(true);
+        scene4();
+        });
+    }
 });
-
 F.on("keyup", (e)=>{
     if (e.code == "ArrowLeft" || e.code == "ArrowRight"){
         moveLeft = false;
@@ -77,23 +421,101 @@ F.on("keyup", (e)=>{
         //RoshiIdling.y = RoshiY;
     }
 });
+let Roshientrance = false;
+const helpButton = new Button(150,50,"Help Sri!").pos(W/2,350).animate({props:{alp:1}});
+helpButton.vis(false);
 
+helpButton.tap((e)=>{
+    zog("tapped");
+    Roshientrance = true;
+    RoshiWalking.vis(true);
+    //zog(RoshiWalking);
+    e.target.vis(false);
+    scene2();
+    
+    // if(RoshiWalking.x<100){
+    //     moveRight = true;
+    // } else if (RoshiWalking.x>=100){
+    //     moveRight = false;
+    // }
+    
+    //RoshiWalking.vis(true);
+    //RoshiWalking.animate({x:100});
+});
+
+Ticker.add(entersRoshi);
+function entersRoshi(){
+    if(Roshientrance) 
+    {
+        RoshiWalking.x +=5;
+        RoshiX = RoshiWalking.x;
+        RoshiWalking.vis(true);
+        if(RoshiWalking.x >=100){
+            Roshientrance = false;
+            moveRight = false;
+            RoshiIdling.vis(true);
+            RoshiIdling.x = RoshiX;
+            //zog(RoshiX);
+            swoosh.play();
+            uiInst.alp(0);
+            uiInst.vis(true);
+            uiInst.animate({props:{alpha:1},time:0.5});
+        }
+        S.update();
+    }
+
+}
 Ticker.add(moveRoshi);
-
 function moveRoshi() {
-    if (moveLeft){
+    // if(attacking && RoshiAttacking.currentFrame == RoshiAttacking.endFrame){
+    //     zog("nuff said");
+    //     attacking = false;
+    //     RoshiAttacking.vis(false);
+    //     RoshiIdling.vis(true);
+    // }
+    if (moveLeft &&!attacking){
+        RoshiAttacking.vis(false);
         RoshiWalking.x -=5;
         //RoshiIdling.x -=5;
         RoshiX = RoshiWalking.x;
     }
-    if(moveRight){
+    if(moveRight &&!attacking){
+        RoshiWalking.vis(true);
+        RoshiAttacking.vis(false);
         RoshiWalking.x += 5;
         //RoshiIdling.x += 5;
         RoshiX = RoshiWalking.x;
     }
-    S.update();
+    if (RoshiWalking.hitTestRect(stars)||RoshiIdling.hitTestRect(stars)) {
+        onRoshiHitsStars();
+    }
+    //if(attacking){
+        //RoshiX=RoshiWalking.x;
+    //}
+    //S.update();
 }
+
+
+
+function onRoshiHitsStars() {
+    zogr("Roshi hit the stars!");
+    scene3();
 }
+
+// function scene3(){
+//     fadzOut(scene2Dialog,1);
+//     fadzOut(stars, 1);
+//     stars.pos(-100,-100);
+//     //scene2Dialog.vis(false);
+//     zog("scene3 begins");
+//     fadz(scene3Dialog,1);
+// }
+//const uiFrame = new Frame(scaling, width, height, color, outerColor, uiReady, uiAssets, uiPath);
+//function uiReady() {
+  //  const dialogBox = new Rectangle();
+//}
+}
+
 </script>
     <meta name="viewport" content="width=device-width, user-scalable=no" />
 </head>

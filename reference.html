@@ -1,0 +1,887 @@
+
+<!doctype html>
+<html>
+<head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-GSHN2BZVKW"></script>
+<script>window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-GSHN2BZVKW');</script>
+<meta charset="utf-8" />
+<title>Alone Droid 2 - Neon Caves</title>
+
+<!-- Welcome to ZIM at http://zimjs.com - Code Interactive Media Pizzazz!             -->
+<!-- ZIM runs on the HTML Canvas powered by JavaScript and CreateJS http://createjs.com -->
+<!-- Founded by Inventor Dan Zen - http://danzen.com - Canadian New Media Award Winner     -->
+<!-- ZIM is free to use. You can donate to help improve ZIM at http://zimjs.com/donate     -->
+
+<script src="https://zimjs.org/cdn/1.2.0/createjs_min.js"></script>
+<script src="https://zimjs.org/cdn/10.5.3/zim.js"></script>
+
+<!-- use zimjs.com/distill for minified individual functions! -->
+
+<!-- import Box2D and ZIM Physics helper -->
+<script src="https://zimjs.org/cdn/Box2dWeb-2.1.a.3.min.js"></script>
+<script src="https://zimjs.org/cdn/physics_2.0.js"></script>
+<script src="https://zimjs.org/cdn/game_2.2.js"></script>
+<script src="https://zimjs.org/cdn/pizzazz_03.js"></script>
+
+<script>
+
+// SCALING OPTIONS
+// scaling can have values as follows with full being the default
+// "fit"    sets canvas and stage to dimensions and scales to fit inside window size
+// "outside"    sets canvas and stage to dimensions and scales to fit outside window size
+// "full"    sets stage to window size with no scaling
+// "tagID"    add canvas to HTML tag of ID - set to dimensions if provided - no scaling
+
+// var scaling = "fit"; // this will resize to fit inside the screen dimensions
+// var width = 1920;
+// var height = 1080;
+// var color = black;
+// var outerColor = darker;
+
+var backingColor = darker; // It's not used anywhere?!
+var wallColor = black; // Not necessary for my game.
+
+var floorHeight = 100;
+var isMobile = mobile();
+
+var dist = 50000;
+var droidR = 60;
+var jumpForce = -150;
+var scrollerFactor = 2;
+var droidDensity = .5;
+var droidSpeed = 80;
+var droidOffset = -80;
+var dimFront = isMobile?.8:.85;
+var lightFront = isMobile?.2:.3; // change front when day rises
+var dimBack = .4;
+var colors = [pink,blue,purple,yellow,orange,red];
+var score = 500000;
+var scoreLabel;
+var drainInterval;
+var drainAmount = 100;
+var powerAmount = 10;
+
+var assets = [
+    {font:"deathstar", src:"DeathStar.otf"},
+    {font:"ceta", src:"5ceta_mono.ttf"},
+    "intro.mp3" // from D9 Album, SIPML music
+];
+var path = "assets/"
+
+// FRAMES
+// we have a bottom frame for scroller and green line at bottom
+// we have a frame frame for physics
+// we have a top frame for interface
+// The interface needs to show first but gets made last so we delay the other layers a little
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// BOTTOM LAYER - BACKING SCROLLERS
+
+var bottom = new Frame(scaling, width, height, color, outerColor, assets, path, new Waiter({corner:0, backgroundColor:blue, foregroundColor:yellow}));
+bottom.on("ready", function () {
+
+    var stage = bottom.stage;
+    var stageW = bottom.width;
+    var stageH = bottom.height;
+
+    var accelerator;
+    var frontDimmer;
+    var intro = bottom.asset("intro.mp3");
+
+    // give a touch of time to let the interface in the third frame to be created
+    // otherwise these flash and then the dark backing and leaderboard come on top
+    // NOTE: the zim timeout (and interval) has the time first and then the function
+    timeout(500, function () {
+        var sky = new Rectangle(stageW, stageH).addTo(stage);
+        sky.linearGradient(["lightgreen", blue], [0, 1], 0, stageH, 0, 0)
+
+        var cityTile = new Tile({
+            obj:makeDome, // each time it tiles it calls this function (in helper functions at very bottom)
+            cols:12,
+            rows:1
+        }).sca(1.5);
+        // the tile will tile based on the width and height of the first tile
+        // if we cache it then it may cut off parts of the city
+        // so give some extra space in a container and cache the container
+        var city = new Container(cityTile.width+800, cityTile.height);
+        cityTile.loc(400,0,city);
+        city.cache();
+
+        // the scroller makes a clone of the backing
+        // if cloning the city container directly it tries to clone all the city parts
+        // it does okay - but for some reason the second city object made and beyond
+        // have black tower stems - something in the recursive cloning...
+        // so we clone the picture of the city container (the cacheCanvas) which is probably faster anyway
+        var cityScroller = new Scroller({
+            backing:new Bitmap(city.cacheCanvas).pos(100,90,false,true,stage),
+            speed:.04*scrollerFactor // a factor that we can adjust from one place
+        });
+
+        // overlay a rectangle to dim the scroller
+        var backDimmer = new Rectangle(stageW, stageH).alp(dimBack).addTo(stage);
+
+        // create a front scroller for the city
+        var cityFrontTile = new Tile({
+            obj:makeDome, // each time it tiles it calls this function
+            cols:10, // 20 did not show up on mobile because it creates too big an image - sigh
+            rows:1
+        }).sca(3);
+        var cityFront = new Container(cityFrontTile.width+800, cityFrontTile.height);
+        cityFrontTile.loc(400,0,cityFront);
+        cityFront.cache();
+
+        var cityFrontScroller = new Scroller({
+            backing:new Bitmap(cityFront.cacheCanvas).pos(100,90,false,true,stage),
+            speed:.1*scrollerFactor
+        });
+
+        // an Accelerator controls the percent speed of the scrollers
+        // could also control the percentSpeed of a Dynamo holding a Sprite
+        // this would then handle a running player for instance
+        // see https://zimjs.com/explore/sidescroller.html
+        // in this game, we will change the speed of the accelerator based on the physics followSpeed
+        accelerator = new Accelerator([cityScroller, cityFrontScroller]);
+        accelerator.percentSpeed = 0;
+
+        frontDimmer = new Rectangle(stageW, stageH).alp(dimFront).addTo(stage);
+
+        // this creates a green neon line along the floor
+        // the shapes with neon outlines are above the line
+        // but behind a black rectangle in the top level
+        // this nicely connects the neon of the floor to the neon of the crystals
+        new Rectangle(stageW+6, floorHeight+3, wallColor, green, 5).pos(-3,-3,false,true,stage);
+
+        bottom.color = blue; // also wait inside this interval to set the color of the frame
+
+        stage.update();
+    });
+
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // MIDDLE LAYER - PHYSICS WORLD
+
+    var frame = new Frame(scaling, width, height);
+    frame.on("ready", function() {
+        zog("ready from ZIM Frame"); // logs in console (F12 - choose console)
+
+        var stage = frame.stage;
+        var stageW = frame.width;
+        var stageH = frame.height;
+
+        // we do not want to start the physics until the intro is done
+        // so we need to put the physics in a function and run it from the top frame
+        // however certain things in the function need to be accessed by the top frame
+        // and certain things in the top frame need to be accesssed by the physics
+        // these are things like the score, the music, the energy settings, etc.
+        // so we will store these as variables outside the function so we have a shared scope
+
+        // we also have an assets issue
+        // we want the assets to load after the intro
+        // but they need to load before the physics and the game begins
+        // so search for assetsCheck and waitingCheck to see how we handle that
+
+        var assetsCheck = false;
+        var waitingCheck = false;
+        var startCheck = false; // when the physics is made
+        var powerCheck = false; // when the first power is hit
+        var powerInterval; // takes off points every second
+        var night = true; // we have two states - night and day - day is for coming back
+        var firstCrystalCheck = true; // we make a bad sound only for the first crystal hit
+
+        // various variables we need in both the startGame function and the top frame
+        var physics, droid;
+        var leaderBoard, foil, indicator;
+        var sounds, music;
+        var caves, jump, powerdown, powerup, hit, sun, win, status, arrive, bad;
+        var pane, sunMessage1, sunMessage2, sunMessage3, winMessage;
+        var introSound, cavesSound
+        // caves - backing music is from Spaghetti Guitar In Space by Peter Surdoval
+        var assetsLoad = frame.loadAssets(["caves.mp3", "jump.mp3", "powerdown.mp3", "powerup.mp3", "hit.mp3", "sun.mp3", "win.mp3", "energy.png", "status.mp3", "arrive.mp3", "bad.mp3"], "assets/");
+        assetsLoad.on("complete", function () {
+            assetsCheck = true;
+            if (waitingCheck) {
+                // if the assets had not loaded before the player gets to the end of the intro panels
+                // then they have now and we need to hide the last waiting panel and start the game
+                // otherwise the game will have already started when we close the last intro panel (and there would be no waiting panel)
+                pane.hide();
+                startGame();
+            }
+            // could have used an audioSprite and all this would be done automatically
+            // audioSprites also load "easier" on mobile
+            caves = frame.asset("caves.mp3");
+            jump = frame.asset("jump.mp3");
+            powerdown = frame.asset("powerdown.mp3");
+            powerup = frame.asset("powerup.mp3");
+            hit = frame.asset("hit.mp3");
+            sun = frame.asset("sun.mp3");
+            win = frame.asset("win.mp3");
+            status = frame.asset("status.mp3");
+            arrive = frame.asset("arrive.mp3");
+            bad = frame.asset("bad.mp3");
+        });
+
+        // delay the creation of the physics until pane messages are done
+        // so this will run after the top frame with all the interface and intro panels, etc. are made
+
+        function startGame() {
+
+            startCheck = true;
+
+            // we are in a second frame
+            // any addTo(), center(), etc. operate on the zimDefaultFrame's stage
+            // this would be the first frame's stage unless we change it
+            // so here we change it...
+            zimDefaultFrame = frame;
+
+            // test to see if the sounds checkBox is checked for any sounds we play
+            if (sounds.checked) arrive.play({volume:.5});
+
+            // create a Physics world with very wide boundary
+            // the true sets the follow to true
+            // later we will set which physics object to follow
+            // and Physics will keep that object in the center by moving the stage
+            // it will also provide a followSpeed - that we use to control the accelerator holding the scrollers
+            physics = new Physics(10, new Boundary(0, 0, dist, stageH-floorHeight), true)
+
+            // Yay! Our hero
+    		droid = new Circle(droidR, blue, grey)
+                .center()
+                .addPhysics({density:droidDensity})
+                .follow({
+                    borderLock:true,
+                    vertical:false, // can follow vertically to for platforms higher than screen
+                    leftOffset:-droidOffset, // these set where the droid wants to be as moving
+                    rightOffset:stageW+droidOffset // when not moving the droid goes to the center
+                    // there are also damping settings for the offset and the follow
+                })
+                .control({vertical:false, speed:droidSpeed}); // control the head with keys
+
+    		// make the little grips on the droid body
+    		var tri = new Triangle(droidR/3, droidR/2.5, droidR/2.5, "rgba(0,0,0,.5)")
+    			.alp(.5)
+    			.reg(null, -droidR+25); // this will let us rotate triangles around edge of circlular body
+    		var inner = new Container(-droidR,-droidR,droidR*2,droidR*2); // match the configuration of a Circle with 0,0 in center
+    		loop(10, function(i, total) {
+    			tri.clone().rot(i*360/total).addTo(inner);
+    		});
+    		inner.cache().centerReg(droid); // cache the triangles - no point in constantly recalculating these vectors
+
+            var head = new Circle({radius:droid.radius, color:yellow, borderColor:grey, percent:45}).addTo(droid);
+            new Circle(droidR/4, "rgba(0,0,0,.2)", "rgba(0,0,0,.4)").center(head).mov(0,5);
+
+    		// the head is in the droid but the droid spins
+    		// so we will move the head the opposite rotation of the droid
+    		// we do not want to do this instantly so we will damp the motion
+    		// set up the ZIM Damp to handle this and set the damping to .3
+    		// this will move the head back not too quickly and not too slowly
+    		// we found this by changing the number until we liked it
+    		// the rotation of the head is actually in the Ticker function...
+    		head.damp = new Damp(0, .5);
+
+            // Ticker for head rotation
+            // and also set the accelerator speed to the follow speed
+            Ticker.add(function () {
+                head.rot(head.damp.convert(-droid.rotation));
+                accelerator.percentSpeed = physics.followSpeed;
+            });
+
+            // the physics movement is done with control() - for keys and mobile tab buttons
+            // here we need to jump still
+            // we only jump if ground is true
+            // we added a little jump sound if the intro music is on
+            // but found it a little annoying during the game so turned it off for later
+            frame.on("keydown", function (e) {
+                if ((e.keyCode == 32 || e.keyCode == 38 || e.keyCode == 87) && droid.ground) { // space, up, w
+                    if (!powerCheck && sounds.checked) jump.play({volume:.5});
+                    droid.impulse(0,jumpForce); // jump - could get crystal angle
+                    droid.ground = false;
+                }
+            });
+
+            // here are the contact and endContact physics callbacks
+            // they receive a parameter that tells what zim object is hit
+            // the second parameter they receive is the physics object
+            // which you would use to test for the boundaries (see docs)
+
+            // here we basically take away score if hitting the crystals
+            // and handle hitting the energy power circles
+            // note - we keep track of the power that is the closest (see powerInterval down below a bit)
+            // and just check for that one on contact
+            // we also move the energy sprite based on that too
+
+            night = true;
+            firstCrystalCheck = true;
+            droid.contact(function (obj) {
+
+                // we set the ground for all contacts
+                // we could not set the ground if the crystal is in the air
+                // but we like that little extra flying jump for a little extra gameplay
+                droid.ground = true;
+
+                // only set once per crystal being hit - until contact ends
+                // use the color as a test
+                if (obj && obj.color == wallColor && obj.type == "Triangle") {
+                    // loose time
+                    if (firstCrystalCheck) { // play warning sound only once
+                        timeout(200, function(){
+                            if (sounds.checked) bad.play({volume:1});
+                        });
+                        firstCrystalCheck = false;
+                    }
+                    // make sure that we do not run multiple intervals
+                    if (drainInterval) drainInterval.clear();
+                    // every 50ms take away score until contact is lost
+                    drainInterval = interval(50, function(){
+                        score-=drainAmount;
+                        scoreLabel.text = score;
+                        top.stage.update();
+                    }, null, true); // start right away
+                    obj.color = obj.borderColor;
+                    if (sounds.checked) hit.play({volume:.2});
+                }
+                if (obj == power) { // one of the energy circles
+                    if (!power.hitting) {
+                        power.hitting = true; // avoid double hitting
+                        if (!powerCheck) { // first time hitting
+                            powerMessage.removeFrom(); // remove tip
+                            cavesSound = caves.play({loop:true}); // play themesong
+                            if (!music.checked) cavesSound.volume = 0; // reduce volume if music checkbox is off
+                            animate(introSound, {volume:0}, 3000); // fadeout introSound (note, this is a CreateJS Sound Instance)
+                            powerCheck = true; // no longer first time - we reset this on new game
+                        }
+
+                        // we store data about the power in powerData - down below
+                        // each power has a matching index powerNum property
+                        // power is the current closest power so we get the data for that
+                        var data = powerData[power.powerNum];
+                        if (data.on) { // of power is on then turn it off
+                            energy.removeFrom(); // remove the animated Sprite
+                            indicator.getChildAt(power.powerNum).color = black;
+                            power.borderWidth = 5;
+                            power.borderColor = data.color;
+                            power.color = black;
+                            if (sounds.checked) powerdown.play();
+                        } else { // otherwise we turn the power on
+                            energy.loc(power.x, power.y, stage, 0);
+                            indicator.getChildAt(power.powerNum).color = data.color;
+                            energy.frame = 0;
+                            power.color = data.color;
+                            if (sounds.checked) powerup.play();
+                        }
+                        top.stage.update();
+                        data.on = !data.on; // update the power data
+
+                        // loop through all the data
+                        // check if any are on and it is night
+                        // or if any are off and it is day
+                        // if either then we must keep going
+                        var keepGoing = loop(powerData, data=>{
+                            if (night==data.on) return true;
+                        });
+
+                        // if we do not have to keep going
+                        // then we are either about to change to day or we are at the end!
+                        if (!keepGoing) {
+                            if (night) {
+                                night = false; // change to day
+                                scoreLabel.color = silver;
+                                frontDimmer.animate({alpha:lightFront}, 4000);
+                                barBacking.animate({alpha:0}, 2000);
+                                if (sounds.checked) sun.play();
+                                pane.label.text = sunMessage1;
+                                pane.show();
+                                pane.on("close", function() {
+                                    if (sounds.checked) status.play({volume:.3});
+                                    pane.label.text = sunMessage2;
+                                    pane.show();
+                                    pane.on("close", function() {
+                                        if (sounds.checked) status.play({volume:.3});
+                                        pane.label.text = sunMessage3;
+                                        pane.show();
+                                    },null,true); // once
+                                },null,true); // once
+                            } else { // we have won!
+                                if (sounds.checked) win.play();
+                                animate({
+                                    target:cavesSound,
+                                    // found every once in a while we lose sound if animating to 0
+                                    // so if we set the volume back up - it would not play
+                                    // so added this fix - not sure if I was imagining things...
+                                    props:{volume:.1},
+                                    time:3000,
+                                    call:function(){
+                                        cavesSound.stop();
+                                    }
+                                });
+                                introSound = intro.play();
+                                if (!music.checked)  introSound.volume = 0;
+                                powerInterval.pause();
+                                pane.label.text = winMessage;
+                                pane.show();
+                                pane.on("close", function() {
+                                    if (sounds.checked) status.play({volume:.3});
+                                    foil.addTo(top.stage,0).alp(1);
+                                    frontDimmer.alp(dimFront);
+                                    // call the leaderBoard and send score
+                                    // nothing will happen if score does not make it
+                                    // if it does make it, player can add their initials
+                                    leaderBoard.addTo(top.stage);
+                                    leaderBoard.score(score);
+                                },null,true); // once
+                            }
+                        }
+                    }
+                } else {
+                    powers.loop(p=>{p.hitting = false}); // reset hitting property of powers
+                }
+            });
+
+            // ending contact with an object
+            // of a crystal then set the color of a crystal back to the wall color
+            // and stop draining points
+            droid.contactEnd(function (obj) {
+                if (obj && obj.color != wallColor && obj.type == "Triangle") {
+                    obj.color = wallColor;
+                    if (drainInterval) drainInterval.clear();
+                }
+            });
+
+
+            // OBSTACLES
+            var colorSeries = series(copy(colors)); // used for energy ports
+
+            // created with editing tool
+            var neons = []
+
+            // a,b,c,deltaX,top
+            // distance (index 3) is relative to last position
+            // so start first one relative to stage
+            var lastNeon = stage;
+            loop(neons, neon=>{lastNeon=makeNeon(...neon, lastNeon)});
+
+            // powers get added to a container for easy looping later
+            var powers = new Container(stageW, stageH).addTo();
+
+            var energy;
+            var power;
+            var powerData = [ // locations made in editing tool
+                {color:colorSeries(), x:3080, y:490, on:true},
+                {color:colorSeries(), x:7575, y:490, on:true},
+                {color:colorSeries(), x:17370, y:490, on:true},
+                {color:colorSeries(), x:27180, y:390, on:true},
+                {color:colorSeries(), x:36048, y:340, on:true},
+                {color:colorSeries(), x:47223, y:300, on:true}
+            ];
+
+
+            // create the energy circles
+            loop(powerData, (data, i)=>{
+                data.power = new Circle(32, data.color).loc(data.x, data.y, powers).addPhysics(false);
+                data.power.powerNum = i; // store index on circle
+            });
+            power = powerData[0].power; // set current power
+            energy = new Sprite(frame.asset("energy.png"), 5, 5);
+            energy.centerReg().alp(.5).sca(1).loc(power).bot().run({time:2000, loop:true});
+
+            powerMessage = new Label({
+                text:"TURN OFF ALL\n\nENERGY PORTS",
+                color:white,
+                font:"ceta"
+            }).sca(.5).centerReg().loc(power).mov(0,-200);
+
+            // here we drain the score
+            // depending on how many powers are in wrong setting
+            // we also determine closest power and set power
+            powerInterval = interval(1000, function(){
+                var many = 0;
+                indicator.loop(circle=>{
+                    if (night && circle.color != black) many++;
+                    else if (!night && circle.color == black) many++;
+                });
+                score -= powerAmount*many;
+                if(scoreLabel) scoreLabel.text = score;
+                top.stage.update();
+                // check closest power
+                var dist = Math.abs(droid.x-power.x);
+                loop(powerData, data=>{
+                    var checkDist = Math.abs(droid.x-data.x);
+                    if (checkDist < dist) {
+                        power = data.power;
+                        if (data.on) energy.loc(power.x, power.y, stage, 0);
+                        dist = checkDist;
+                    }
+                });
+            });
+
+            var crystalMessage = new Label({
+                text:"NEON CRYSTAL",
+                color:light,
+                font:"ceta"
+            }).sca(.5).centerReg().loc(3990,930);
+            interval(1000, function (obj) { // remove then message one out of view
+                if (stage.x < -3000) {
+                    crystalMessage.removeFrom();
+                    obj.clear();
+                }
+            });
+
+            stage.update(); // this is needed to show any changes
+
+
+        } // end startGame
+
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // TOP LAYER - INTERFACE
+
+        var barBacking;
+        var top = new Frame(scaling, width, height);
+        top.on("ready", function() {
+            var stage = top.stage;
+            var stageW = top.width;
+            var stageH = top.height;
+
+            zimDefaultFrame = top; // otherwise addTo() would need addTo(stage) - see earlier note
+
+            // dark rectangle to hide the game
+            foil = new Rectangle(stageW, stageH).alp(1).addTo();
+
+            // see https://zimjs.com/leaderboard/
+            leaderBoard = new LeaderBoard({
+                data:"H64DDB5",
+                font:"ceta", fontSize:30, nameShift:20, scoreShift:7,
+                corner:0,
+                backgroundColor:dark
+            })
+                .sca(1.5)
+                .center(stage);
+
+            leaderBoard.backing.colorCommand.linearGradient([yellow, blue], [0, 1], 0, 0, 0, leaderBoard.height/2);
+            leaderBoard.on("close", function() {
+                closeLeaderBoard();
+            });
+
+
+            function closeLeaderBoard() {
+                foil.removeFrom();
+                if (!startCheck) { // has not started yet - so get starting...
+                    introSound = bottom.asset("intro.mp3").play({loop:true});
+                    if (!music.checked) introSound.volume = 0;
+                } else {
+                    score = 500000;
+                    scoreLabel.color = grey;
+                    scoreLabel.text = score;
+                    powerCheck = false;
+                    night = true;
+                    firstCrystalCheck = true;
+                }
+                leaderBoard.removeFrom();
+                pane.text = introMessage1;
+                pane.show();
+                setPaneStart();
+            }
+            foilEvent = foil.on("mousedown", closeLeaderBoard);
+
+
+            // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            // STATUS PANE
+            var introMessage1 = "CITY SLEEPS";
+            var introMessage2 = "MUST TURN OFF ENERGY PORTS";
+            var introMessage3 = "AVOID NEON CRYSTALS";
+            var introMessage4 = "MUST WAIT FOR DROP TIME";
+            sunMessage1 = "CITY WAKES";
+            sunMessage2 = "MUST TURN ON ENERGY PORTS";
+            sunMessage3 = "INCLUDING THIS ONE!";
+            winMessage = "BY ZIM! NEONDOM HUMS"
+
+            pane = new Pane({
+                label:new Label({
+                    align:"center",
+                    color:white,
+                    font:"ceta",
+                    text:introMessage1
+                }),
+                width:stageW+30,
+                height:200,
+                backgroundColor:purple,
+                backdropColor:"rgba(0,0,0,.1)",
+                corner:0
+            }).reg(0, 40);
+            pane.label.mov(0,10);
+            new Triangle({color:white}).sca(.6).alp(.5).rot(90).center(pane).pos(70,null,true);
+
+            // general idea here is on close event call the next pane
+            // but be careful to remove each previous close event
+            // could have done this with a Pages object for instance but this works
+            // we are going to set this again if they play again so put it in a function
+
+            function setPaneStart() {
+                pane.on("close", function() {
+                    if (sounds.checked) status.play({volume:.3});
+                    pane.label.text = introMessage2;
+                    pane.show();
+                    pane.on("close", function() {
+                        pane.label.text = introMessage3;
+                        pane.show();
+                        if (sounds.checked) status.play({volume:.3});
+                        pane.on("close", function(e) {
+                            // if we have not started then test to see if the assets are ready
+                            if (!startCheck) {
+                                if (assetsCheck) {
+                                    startGame();
+                                    e.remove();
+                                } else { // if the assets are not ready - then the asset load event will start the game
+                                    waitingCheck = true;
+                                    pane.label.text = introMessage4;
+                                    if (sounds.checked) status.play({volume:.3});
+                                    pane.show();
+                                }
+                            } else {
+                                // we are restarting the game - restart the energy draining score interval
+                                powerInterval.pause(false);
+                            }
+                        });
+                    },null,true); // once
+                },null,true); // once
+            }
+
+            frame.on("keydown", function (e) { // let keys clear panes
+                if (leaderBoard.parent) return;
+                if (e.keyCode == 13 || e.keyCode == 32) { // enter or spacebar
+                    pane.hide(true);
+                }
+            });
+
+            // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    		// TOP BAR
+    		// a top bar to hold logo and time
+
+            var totalTime = 500000;
+    		var bar = new Container(stageW, 100).addTo();
+    		barBacking = new Rectangle(bar.width, bar.height, black).addTo(bar);
+            barBacking.linearGradient(["rgba(0,0,0,0)", black], [0, 1], 0, barBacking.height, 0, 0)
+
+    		new Label({text:"ALONE DROID", font:"deathstar", size:50, color:silver})
+    			.center(bar).pos(20);
+
+            indicator = new Tile(new Circle(11, series(colors), series(colors), 5), 6, 1, 20).center(bar).pos(270,null,true);
+
+    		var startTime = Date.now();
+    		scoreLabel = new Label({
+    			text:totalTime,
+    			color:grey,
+    			font:"ceta",
+    			size:26,
+    			align:"right",
+                shiftVertical:10 // for this custom font...
+    		}).center(bar).pos(50,null,true);
+
+            // black floor that overlays the bottom of the crystals
+            var floor = new Rectangle(stageW, floorHeight, wallColor).pos(0,-2,false,true,stage)
+
+            var bottomBar = new Container(stageW, floorHeight-10).pos(0,5,false,true);
+
+    		music = new CheckBox({
+    			startChecked:true,
+    			indicatorType:"x",
+                backgroundColor:dark,
+    			label:new Label({
+    				text:"MUSIC",
+    				font:"ceta",
+    				size:30,
+    				color:dark,
+                    shiftVertical:10
+    			})
+    		}).sca(.55).center(bottomBar).mov(isMobile?-100:630,8);
+    		music.on("change", function() { // handle either backing music
+                if (powerCheck) cavesSound.volume = music.checked ? 1 : 0;
+                else introSound.volume = music.checked ? 1 : 0;
+    		});
+
+    		sounds = new CheckBox({
+    			startChecked:true,
+    			indicatorType:"x",
+                backgroundColor:dark,
+    			label:new Label({
+    				text:"SOUNDS",
+    				font:"ceta",
+    				size:30,
+    				color:dark,
+                    shiftVertical:10
+    			})
+    		}).sca(.55).center(bottomBar).mov(isMobile?100:820,8);
+
+
+            // mobile gets left, right and jump buttons
+            // as it has no keys - could have also used tilt - see Frame docs events for
+            // "devicemotion" - MUST SET Frame sensors parameter to true for tilt
+            if (isMobile) {
+                var leftBut = new Label({
+                    text:"LEFT",
+                    font:"ceta",
+                    size:30,
+                    shiftVertical:10,
+                });
+                var rightBut = leftBut.clone();
+                rightBut.text = "RIGHT";
+                var jumpBut = leftBut.clone();
+                jumpBut.text = "JUMP";
+
+                STYLE = {
+                    type:{
+                        Tabs:{
+                            width:450,
+                            height:bottomBar.height,
+                            color:grey,
+                            rollColor:grey,
+                            borderColor:silver,
+                            backgroundColor:black,
+                            rollBackgroundColor:black,
+                            spacing:10,
+                            currentSelected:false,
+                            currentEnabled:true
+                        }
+                    }
+                }
+                var tabs1 = new Tabs({tabs:[{label:leftBut, width:250}, {label:jumpBut, width:250}]}).center(bottomBar).pos(10);
+                var tabs2 = new Tabs({tabs:[{label:jumpBut.clone(true), width:250}, {label:rightBut, width:250}]}).center(bottomBar).pos(10,null,true);
+
+                tabs1.on("mousedown", doTabsDown);
+                tabs2.on("mousedown", doTabsDown);
+                tabs1.on("pressup", doTabsUp);
+                tabs2.on("pressup", doTabsUp);
+                function doTabsDown(e) {
+                    // handle jump - also see doTabsUp
+                    if (e.target.text == "JUMP") {
+                        if (droid.ground) droid.impulse(0,jumpForce); // jump
+                        if (!powerCheck && sounds.checked) jump.play({volume:.5});
+                        droid.ground = false;
+                        return;
+                    }
+                    // else passing in "left" or "right" to physics custom control
+                    physics.customControl(e.target.text.toLowerCase()); // will use default control speed
+                }
+                function doTabsUp(e) {
+                    if (e.target.text == "JUMP") return;
+                    physics.customControl(e.target.text.toLowerCase(), 0); // zero speed
+                }
+            }
+
+            stage.update();
+
+        }); // end top ready
+
+    }); // end of frame ready
+
+}); // end of bottom ready
+
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// HELPER FUNCTIONS
+
+// FUNCTION FOR TRIANGLES
+
+function makeNeon(a,b,c,deltaX,top,last) {
+    return new Triangle(a, b, c)
+        .centerReg() // for physics
+        .rot(top?180:0)
+        .pos(
+            0,
+            top?-6:floorHeight-6,
+            false,
+            !top
+        )
+        .loc(last.x+last.width/2+a/2+deltaX)
+        .addPhysics(false); // static - will not move but physics objects interact with it
+}
+
+// FUNCTION FOR DOME
+// this makes one random dome
+function makeDome() {
+    let colors = [pink, green, blue, orange, yellow, tin, brown];
+    let dome = new Container(200,500);
+    let minSize = 50;
+    let maxSize = 200;
+    let minPercent = 30;
+    let maxPercent = 70;
+    let size = rand(minSize, maxSize);
+    let percent = rand(minPercent, maxPercent);
+    let baseHeight = new Proportion(minSize, maxSize, 300, 0);
+    let baseWidth = new Proportion(minSize, maxSize, 150, 30);
+    var shell = new Circle({
+        radius:size,
+        color:colors,
+        borderColor:purple,
+        borderWidth:2,
+        percent:percent
+    }).center(dome).pos(null,baseHeight.convert(size)+size*.2,null,true);
+    shell.colorCommand.radialGradient(
+                    ["rgba(0,0,0,.2)",shell.color],
+                    [0, 1], 40, 0, 0, 0, 0, 100
+            );
+    shell.clone().addTo(dome)
+                    .bot().sca(.8)
+                    .pos(null,baseHeight.convert(size)+size*.1,null,true);
+    shell.clone().addTo(dome)
+                    .bot().sca(.6)
+                    .pos(null,baseHeight.convert(size),null,true);
+    let height = baseHeight.convert(size);
+    let width = baseWidth.convert(height)
+    let shade = new Rectangle(width,height,black)
+                .center(dome)
+                .bot()
+                .pos(null, 0, null, true);
+    shade.colorCommand.linearGradient(
+        ["rgba(0,0,0,.3)","rgba(0,0,0,.1)","rgba(0,0,0,.4)"],
+        [.2, .5, .9], 0, 0, shade.width, 0
+    );
+    let stem = new Rectangle(width,height,colors)
+                .center(dome)
+                .bot()
+                .pos(null, 0, null, true);
+    let windowSize = 5;
+    let windowSpacing = 5;
+    let windowsV = Math.floor(rand(90,100)/100*height/(windowSize+windowSpacing));
+    let windowsW = Math.floor(rand(40,60)/100*width/(windowSize+windowSpacing));
+    if (windowsV * windowsW > 0) {
+        new Tile(
+            new Rectangle(windowSize, windowSize, [white,grey]).alp(.5),
+            windowsW,
+            windowsV,
+            windowSpacing,
+            windowSpacing
+        )
+            .center(stem)
+            .pos(null,windowSpacing,null,true);
+    }
+    return dome;
+}
+
+
+
+</script>
+
+<meta name="viewport" content="width=device-width, user-scalable=no" />
+
+</head>
+
+<body>
+<!-- canvas with id="myCanvas" is made by zim Frame -->
+<script>
+var r=Math.round(Math.random()*1000000);
+document.write('<img src=/cgi-bin/traffic_plus?company=danzen&page=zimAloneDroid2&r='+r+' width=1 height=1>');
+</script>
+</body>
+</html>
